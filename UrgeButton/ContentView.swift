@@ -1,22 +1,20 @@
 import SwiftUI
-import UIKit   // for UIImpactFeedbackGenerator
+import UIKit   // for haptics
 
-// MARK: — Haptic Helper
+// MARK: – Haptic Helper
 func vibrate() {
-    let generator = UIImpactFeedbackGenerator(style: .medium)
-    generator.impactOccurred()
+    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 }
 
 struct ContentView: View {
-    @StateObject private var store = UrgeStore()
-    @State private var showingAdd = false
-    
-    // Which Urge is the “main” one?
-    @State private var selectedID: UUID?
-    @State private var isPressed = false
+    // 1️⃣ Accept the shared store instead of creating your own
+    @ObservedObject var store: UrgeStore
+
+    @State private var showingAdd     = false
+    @State private var selectedID     : UUID?
+    @State private var isPressed      = false
     @State private var showResetAlert = false
 
-    // Convenience: the currently-selected Urge (or first if none tapped)
     private var mainUrge: Urge? {
         if let id = selectedID {
             return store.urges.first { $0.id == id }
@@ -26,7 +24,6 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // 1. Background gradient
             LinearGradient(
                 gradient: Gradient(colors: [.purple, .blue]),
                 startPoint: .topLeading,
@@ -35,7 +32,7 @@ struct ContentView: View {
             .ignoresSafeArea()
 
             VStack(spacing: 20) {
-                // 2. Horizontal chips to pick your urge
+                // 2️⃣ Your “chips selector” stays the same…
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(store.urges) { urge in
@@ -63,84 +60,103 @@ struct ContentView: View {
 
                 Spacer()
 
-                // 3. Main urge display and buttons
+                // 3️⃣ Main urge & daily stats UI (unchanged)
                 if let urge = mainUrge {
+                    let todayKey      = UrgeStore.dayFormatter.string(from: Date())
+                    let todayResisted = urge.dailyResisted[todayKey] ?? 0
+                    let todayRelapsed = urge.dailyRelapsed[todayKey] ?? 0
+
                     VStack(spacing: 16) {
                         Text(urge.name)
-                            .font(.largeTitle).bold()
-                            .foregroundColor(.white)
+                          .font(.largeTitle).bold()
+                          .foregroundColor(.white)
 
                         Text("\(urge.totalCount)")
-                            .font(.system(size: 72, weight: .heavy))
-                            .foregroundColor(.yellow)
+                          .font(.system(size: 72, weight: .heavy))
+                          .foregroundColor(.yellow)
 
-                        // 4a. “I Resisted!” button with spring animation
+                        HStack(spacing: 24) {
+                            VStack {
+                                Text("\(todayResisted)")
+                                  .font(.title2).bold()
+                                Text("rescued today")
+                                  .font(.caption)
+                                  .foregroundColor(.white.opacity(0.8))
+                            }
+                            VStack {
+                                Text("\(todayRelapsed)")
+                                  .font(.title2).bold()
+                                Text("relapsed today")
+                                  .font(.caption)
+                                  .foregroundColor(.white.opacity(0.8))
+                            }
+                        }
+
                         Button {
                             vibrate()
-                            withAnimation(.interpolatingSpring(stiffness: 300, damping: 15)) {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
                                 isPressed = true
                             }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                withAnimation(.easeOut) { isPressed = false }
+                            DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
+                                withAnimation { isPressed = false }
                             }
                             store.recordTap(on: urge)
                         } label: {
                             Text("I Resisted!")
-                                .font(.title2).bold()
-                                .padding(.vertical, 20)
-                                .padding(.horizontal, 40)
-                                .background(
-                                    Capsule()
-                                        .fill(Color.green)
-                                        .shadow(color: .green.opacity(0.6), radius: 10, x: 0, y: 5)
-                                )
-                                .foregroundColor(.white)
-                                .scaleEffect(isPressed ? 1.2 : 1.0)
+                              .font(.title2).bold()
+                              .padding(.vertical, 20)
+                              .padding(.horizontal, 40)
+                              .background(
+                                  Capsule()
+                                    .fill(Color.green)
+                                    .shadow(color: .green.opacity(0.6), radius: 10, x: 0, y: 5)
+                              )
+                              .foregroundColor(.white)
+                              .scaleEffect(isPressed ? 1.2 : 1.0)
                         }
 
-                        // 4b. **New Reset button**
                         Button {
                             showResetAlert = true
                         } label: {
                             Text("Reset")
-                                .font(.body).bold()
-                                .padding(.vertical, 12)
-                                .padding(.horizontal, 24)
-                                .background(
-                                    Capsule()
-                                        .stroke(Color.red, lineWidth: 2)
-                                )
-                                .foregroundColor(.white)
+                              .bold()
+                              .padding(.vertical, 12)
+                              .padding(.horizontal, 24)
+                              .background(
+                                  Capsule()
+                                    .stroke(Color.red, lineWidth: 2)
+                              )
+                              .foregroundColor(.white)
                         }
                         .padding(.top, 8)
                     }
+
                 } else {
                     Text("No urges yet—tap + to add one!")
-                        .foregroundColor(.white.opacity(0.8))
+                      .foregroundColor(.white.opacity(0.8))
                 }
 
                 Spacer()
 
-                // 5. “+” button to add new urges
+                // 4️⃣ “+” button (same as before)
                 HStack {
                     Spacer()
                     Button {
                         showingAdd = true
                     } label: {
                         Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 48))
-                            .foregroundColor(.white)
-                            .shadow(radius: 5)
+                          .font(.system(size: 48))
+                          .foregroundColor(.white)
+                          .shadow(radius: 5)
                     }
                     .padding()
                 }
             }
         }
-        // 6. Sheet for adding a new urge
+        // 5️⃣ Sheet & alert (same as before)
         .sheet(isPresented: $showingAdd) {
             AddUrgeView(store: store)
         }
-        // 7. Alert to confirm reset
         .alert("Reset “\(mainUrge?.name ?? "")”?", isPresented: $showResetAlert) {
             Button("Cancel", role: .cancel) {}
             Button("Reset", role: .destructive) {
@@ -149,11 +165,11 @@ struct ContentView: View {
                 }
             }
         } message: {
-            Text("This will clear the count and current streak for this urge.")
+            Text("This will log a relapse for today and clear your streak.")
         }
     }
 
-    // MARK: – Nested AddUrgeView
+    // MARK: – Nested AddUrgeView (no changes here)
     struct AddUrgeView: View {
         @Environment(\.dismiss) private var dismiss
         @ObservedObject var store: UrgeStore
@@ -177,9 +193,7 @@ struct ContentView: View {
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel", role: .cancel) {
-                            dismiss()
-                        }
+                        Button("Cancel", role: .cancel) { dismiss() }
                     }
                 }
             }
